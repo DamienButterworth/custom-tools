@@ -1,6 +1,9 @@
 import requests
 import os
 import argparse
+import subprocess
+import csv
+
 from tabulate import tabulate
 
 github_token = os.getenv('GITHUB_TOKEN')
@@ -10,12 +13,14 @@ if not github_token:
     exit(1)
 
 parser = argparse.ArgumentParser(description='Fetch open pull requests from GitHub repositories.')
+parser.add_argument('-fn', '--file-name', required=False, help='Output result to csv file with name')
 parser.add_argument('-o', '--org', required=True, help='GitHub organization name')
 parser.add_argument('-t', '--team', required=True, help='GitHub team slug')
 parser.add_argument('-c', '--creator-filters', nargs='*',
                     help='List of GitHub usernames to filter by. Overrides dynamic team member fetch.')
 
 args = parser.parse_args()
+
 
 def get_open_pull_requests(repo, token, creator_filters=None):
     url = f'https://api.github.com/repos/{repo}/pulls'
@@ -50,6 +55,8 @@ def get_open_pull_requests(repo, token, creator_filters=None):
             print(f"Failed to fetch pull requests for {repo}: {response.status_code}, {response.content}")
             break
     return all_pull_requests
+
+
 def get_team_repositories(org, team_slug, token):
     url = f'https://api.github.com/orgs/{org}/teams/{team_slug}/repos'
     headers = {
@@ -72,8 +79,10 @@ def get_team_repositories(org, team_slug, token):
         else:
             print(f"Failed to fetch repositories for team {team_slug}: {response.status_code}, {response.content}")
             break
-    print(f'Found {len(all_repositories)} repositories' )
+    print(f'Found {len(all_repositories)} repositories')
     return all_repositories
+
+
 def get_team_members(org, team_slug, token):
     url = f'https://api.github.com/orgs/{org}/teams/{team_slug}/members'
     headers = {
@@ -97,7 +106,9 @@ def get_team_members(org, team_slug, token):
             print(f"Failed to fetch members for team {team_slug}: {response.status_code}, {response.content}")
             break
     return all_members
-def list_open_pull_requests(repos, token, creator_filters=None):
+
+
+def list_open_pull_requests_terminal(repos, token, creator_filters=None):
     all_pull_requests = []
 
     for repo in repos:
@@ -112,6 +123,32 @@ def list_open_pull_requests(repos, token, creator_filters=None):
     else:
         print("No open pull requests found for the provided repositories.")
 
+
+def list_open_pull_requests_csv(repos, token, output_file, creator_filters=None):
+    all_pull_requests = []
+
+    for repo in repos:
+        open_prs = get_open_pull_requests(repo, token, creator_filters)
+        all_pull_requests.extend(open_prs)
+
+    if all_pull_requests:
+        # Write the list of pull requests to a CSV file
+        with open(output_file, mode='w', newline='', encoding='utf-8') as file:
+            writer = csv.DictWriter(file, fieldnames=['repository', 'pr_number', 'pr_title', 'created_by', 'created_at',
+                                                      'url'])
+            writer.writeheader()
+            writer.writerows(all_pull_requests)
+
+        print(f"Pull requests have been written to {output_file}")
+
+        # Open the CSV file with the default application
+        subprocess.run(['open', output_file])
+        print(f"Opened {output_file} with the default application.")
+
+    else:
+        print("No open pull requests found for the provided repositories.")
+
+
 org_name = args.org
 team_slug = args.team
 
@@ -122,4 +159,7 @@ if args.creator_filters:
 else:
     creator_filters = get_team_members(org_name, team_slug, github_token)
 
-list_open_pull_requests(repositories, github_token, creator_filters)
+if args.file_name:
+    list_open_pull_requests_csv(repositories, github_token, creator_filters)
+else:
+    list_open_pull_requests_terminal(repositories, github_token, creator_filters)
