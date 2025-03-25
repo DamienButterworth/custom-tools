@@ -1,8 +1,25 @@
 import requests
-import csv
 import os
-import subprocess
 import argparse
+import subprocess
+import csv
+
+from tabulate import tabulate
+
+github_token = os.getenv('GITHUB_TOKEN')
+
+if not github_token:
+    print("Error: GitHub token not found. Please set the GITHUB_TOKEN environment variable.")
+    exit(1)
+
+parser = argparse.ArgumentParser(description='Fetch open pull requests from GitHub repositories.')
+parser.add_argument('-fn', '--file-name', required=False, help='Output result to csv file with name')
+parser.add_argument('-o', '--org', required=True, help='GitHub organization name')
+parser.add_argument('-t', '--team', required=True, help='GitHub team slug')
+parser.add_argument('-c', '--creator-filters', nargs='*',
+                    help='List of GitHub usernames to filter by. Overrides dynamic team member fetch.')
+
+args = parser.parse_args()
 
 
 def get_open_pull_requests(repo, token, creator_filters=None):
@@ -12,7 +29,8 @@ def get_open_pull_requests(repo, token, creator_filters=None):
         'Accept': 'application/vnd.github.v3+json'
     }
 
-    # Handle pagination for pull requests
+    print(f'Fetching pull requests from: {repo}')
+
     all_pull_requests = []
     page = 1
     while True:
@@ -20,13 +38,12 @@ def get_open_pull_requests(repo, token, creator_filters=None):
         if response.status_code == 200:
             pull_requests = response.json()
             if not pull_requests:
-                break  # No more pull requests, exit the loop
+                break
             for pr in pull_requests:
                 if creator_filters and pr['user']['login'] not in creator_filters:
                     continue
                 pr_data = {
                     'repository': repo,
-                    'pr_number': pr['number'],
                     'pr_title': pr['title'],
                     'created_by': pr['user']['login'],
                     'created_at': pr['created_at'],
@@ -54,13 +71,14 @@ def get_team_repositories(org, team_slug, token):
         if response.status_code == 200:
             repositories = response.json()
             if not repositories:
-                break  # No more repositories, exit the loop
+                break
             for repo in repositories:
-                all_repositories.append(repo['full_name'])  # Getting full repository names (e.g., 'org/repo')
+                all_repositories.append(repo['full_name'])
             page += 1
         else:
             print(f"Failed to fetch repositories for team {team_slug}: {response.status_code}, {response.content}")
             break
+    print(f'Found {len(all_repositories)} repositories')
     return all_repositories
 
 
@@ -78,9 +96,9 @@ def get_team_members(org, team_slug, token):
         if response.status_code == 200:
             members = response.json()
             if not members:
-                break  # No more members, exit the loop
+                break
             for member in members:
-                all_members.append(member['login'])  # Adding the username to the list
+                all_members.append(member['login'])
             page += 1
         else:
             print(f"Failed to fetch members for team {team_slug}: {response.status_code}, {response.content}")
@@ -88,7 +106,7 @@ def get_team_members(org, team_slug, token):
     return all_members
 
 
-def list_open_pull_requests(repos, token, output_file, creator_filters=None):
+def list_open_pull_requests_terminal(repos, token, creator_filters=None):
     all_pull_requests = []
 
     for repo in repos:
@@ -96,7 +114,25 @@ def list_open_pull_requests(repos, token, output_file, creator_filters=None):
         all_pull_requests.extend(open_prs)
 
     if all_pull_requests:
-        # Write the list of pull requests to a CSV file
+        #TODO: Figure out how to add headers correctly
+        headers = ["Repository", "PR Title", "Created By", "Created At", "URL"]
+        print("\nOpen Pull Requests:")
+        print(tabulate(all_pull_requests, tablefmt="fancy_grid"))
+    else:
+        print("No open pull requests found for the provided repositories.")
+
+
+def list_open_pull_requests_csv(repos, token, output_file, creator_filters=None):
+    all_pull_requests = []
+
+    for repo in repos:
+        open_prs = get_open_pull_requests(repo, token, creator_filters)
+        all_pull_requests.extend(open_prs)
+
+    if not output_file.endswith('.csv'):
+        output_file = output_file + '.csv'
+
+    if all_pull_requests:
         with open(output_file, mode='w', newline='', encoding='utf-8') as file:
             writer = csv.DictWriter(file, fieldnames=['repository', 'pr_number', 'pr_title', 'created_by', 'created_at',
                                                       'url'])
@@ -104,29 +140,9 @@ def list_open_pull_requests(repos, token, output_file, creator_filters=None):
             writer.writerows(all_pull_requests)
 
         print(f"Pull requests have been written to {output_file}")
-
-        # Open the CSV file with the default application
-        subprocess.run(['open', output_file])
-        print(f"Opened {output_file} with the default application.")
-
     else:
         print("No open pull requests found for the provided repositories.")
 
-
-github_token = os.getenv('GITHUB_TOKEN')
-
-if not github_token:
-    print("Error: GitHub token not found. Please set the GITHUB_TOKEN environment variable.")
-    exit(1)
-
-parser = argparse.ArgumentParser(description='Fetch open pull requests from GitHub repositories.')
-parser.add_argument('-o', '--org', required=True, help='GitHub organization name')
-parser.add_argument('-t', '--team', required=True, help='GitHub team slug')
-parser.add_argument('-fn', '--file-name', default='open_pull_requests.csv', help='Output CSV file name')
-parser.add_argument('-cf', '--creator-filters', nargs='*',
-                    help='List of GitHub usernames to filter by. Overrides dynamic team member fetch.')
-
-args = parser.parse_args()
 
 org_name = args.org
 team_slug = args.team
@@ -138,5 +154,7 @@ if args.creator_filters:
 else:
     creator_filters = get_team_members(org_name, team_slug, github_token)
 
-output_csv_file = args.file_name
-list_open_pull_requests(repositories, github_token, output_csv_file, creator_filters)
+if args.file_name:
+    list_open_pull_requests_csv(repositories, github_token, args.file_name, creator_filters)
+else:
+    list_open_pull_requests_terminal(repositories, github_token, creator_filters)
