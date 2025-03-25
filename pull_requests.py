@@ -38,7 +38,7 @@ def get_open_pull_requests(repo, token, creator_filters=None):
         if response.status_code == 200:
             pull_requests = response.json()
             if not pull_requests:
-                break  # No more pull requests, exit the loop
+                break
             for pr in pull_requests:
                 if creator_filters and pr['user']['login'] not in creator_filters:
                     continue
@@ -64,7 +64,6 @@ def get_team_repositories(org, team_slug, token):
         'Accept': 'application/vnd.github.v3+json'
     }
 
-    # Handle pagination for repositories
     all_repositories = []
     page = 1
     while True:
@@ -72,9 +71,9 @@ def get_team_repositories(org, team_slug, token):
         if response.status_code == 200:
             repositories = response.json()
             if not repositories:
-                break  # No more repositories, exit the loop
+                break
             for repo in repositories:
-                all_repositories.append(repo['full_name'])  # Getting full repository names (e.g., 'org/repo')
+                all_repositories.append(repo['full_name'])
             page += 1
         else:
             print(f"Failed to fetch repositories for team {team_slug}: {response.status_code}, {response.content}")
@@ -90,7 +89,6 @@ def get_team_members(org, team_slug, token):
         'Accept': 'application/vnd.github.v3+json'
     }
 
-    # Handle pagination for team members
     all_members = []
     page = 1
     while True:
@@ -98,9 +96,9 @@ def get_team_members(org, team_slug, token):
         if response.status_code == 200:
             members = response.json()
             if not members:
-                break  # No more members, exit the loop
+                break
             for member in members:
-                all_members.append(member['login'])  # Adding the username to the list
+                all_members.append(member['login'])
             page += 1
         else:
             print(f"Failed to fetch members for team {team_slug}: {response.status_code}, {response.content}")
@@ -116,7 +114,7 @@ def list_open_pull_requests_terminal(repos, token, creator_filters=None):
         all_pull_requests.extend(open_prs)
 
     if all_pull_requests:
-        # Use tabulate to display the pull requests in a table format
+        #TODO: Figure out how to add headers correctly
         headers = ["Repository", "PR Title", "Created By", "Created At", "URL"]
         print("\nOpen Pull Requests:")
         print(tabulate(all_pull_requests, tablefmt="fancy_grid"))
@@ -131,8 +129,10 @@ def list_open_pull_requests_csv(repos, token, output_file, creator_filters=None)
         open_prs = get_open_pull_requests(repo, token, creator_filters)
         all_pull_requests.extend(open_prs)
 
+    if not output_file.endswith('.csv'):
+        output_file = output_file + '.csv'
+
     if all_pull_requests:
-        # Write the list of pull requests to a CSV file
         with open(output_file, mode='w', newline='', encoding='utf-8') as file:
             writer = csv.DictWriter(file, fieldnames=['repository', 'pr_number', 'pr_title', 'created_by', 'created_at',
                                                       'url'])
@@ -140,11 +140,6 @@ def list_open_pull_requests_csv(repos, token, output_file, creator_filters=None)
             writer.writerows(all_pull_requests)
 
         print(f"Pull requests have been written to {output_file}")
-
-        # Open the CSV file with the default application
-        subprocess.run(['open', output_file])
-        print(f"Opened {output_file} with the default application.")
-
     else:
         print("No open pull requests found for the provided repositories.")
 
@@ -160,6 +155,6 @@ else:
     creator_filters = get_team_members(org_name, team_slug, github_token)
 
 if args.file_name:
-    list_open_pull_requests_csv(repositories, github_token, creator_filters)
+    list_open_pull_requests_csv(repositories, github_token, args.file_name, creator_filters)
 else:
     list_open_pull_requests_terminal(repositories, github_token, creator_filters)
