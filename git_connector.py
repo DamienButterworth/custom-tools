@@ -70,7 +70,6 @@ def get_team_repositories(org, team_slug):
 def fetch_pull_requests_for_repos(repos, creator_filters=None):
     with ThreadPoolExecutor() as executor:
         futures = [executor.submit(get_pull_requests, repo, creator_filters) for repo in repos]
-        print(futures)
         results = []
         for future in as_completed(futures):
             try:

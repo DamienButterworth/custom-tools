@@ -9,6 +9,7 @@ parser = argparse.ArgumentParser(description='Fetch open pull requests from GitH
 parser.add_argument('-fn', '--file-name', required=False, help='Output result to csv file with name')
 parser.add_argument('-o', '--org', required=True, help='GitHub organization name')
 parser.add_argument('-t', '--team', required=True, help='GitHub team slug')
+parser.add_argument('-r', '--repo-overrides', nargs='*'),
 parser.add_argument('-c', '--creator-filters', nargs='*',
                     help='List of GitHub usernames to filter by. Overrides dynamic team member fetch.')
 
@@ -43,7 +44,7 @@ def list_open_pull_requests_csv(repos, output_file, creator_filters=None):
 
     if all_pull_requests:
         with open(output_file, mode='w', newline='', encoding='utf-8') as file:
-            writer = csv.DictWriter(file, fieldnames=['repository', 'pr_number', 'pr_title', 'created_by', 'created_at',
+            writer = csv.DictWriter(file, fieldnames=['repository', 'pr_title', 'created_by', 'created_at',
                                                       'url'])
             writer.writeheader()
             writer.writerows(all_pull_requests)
@@ -56,7 +57,10 @@ def list_open_pull_requests_csv(repos, output_file, creator_filters=None):
 org_name = args.org
 team_slug = args.team
 
-repositories = get_team_repositories(org_name, team_slug)
+if args.repo_overrides:
+    repositories = args.repo_overrides
+else:
+    repositories = get_team_repositories(org_name, team_slug)
 
 if args.creator_filters:
     creator_filters = args.creator_filters
