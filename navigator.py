@@ -13,6 +13,8 @@ import pyperclip  # <-- Added for clipboard functionality
 SECTIONS = {
     "GitHub": [
         ("Team repos", git_connector.get_team_repositories),
+        ("Team slugs", git_connector.get_team_slugs),
+        ("Repository branches", git_connector.get_repository_branches),
         ("Pull requests", pull_requests.list_open_pull_requests_team),
     ],
     "Scala": [
@@ -33,6 +35,8 @@ class NavigatorApp(App):
         self.arg_index = 0
         self.arg_prompts = []
         self.collected_args = []
+        self.branch_list = []
+        self.selected_branch = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -107,6 +111,37 @@ class NavigatorApp(App):
                     self.prompt_next_argument()
                     break
 
+        elif self.view_state == "branch_actions":
+            if selected_label == "🔙 Back":
+                self.view_state = "scripts"
+                self.load_scripts(self.current_section)
+                return
+
+            branch_index = self.list_view.index(event.item) - 1
+            self.selected_branch = self.branch_list[branch_index]
+            self.view_state = "branch_action_menu"
+            self.show_branch_action_menu()
+
+        elif self.view_state == "branch_action_menu":
+            if selected_label == "🔙 Back":
+                self.view_state = "branch_actions"
+                self.show_branch_list()
+                return
+
+            if selected_label == "Copy Branch Name":
+                pyperclip.copy(self.selected_branch['name'])
+                self.output_widget.update(
+                    f"[green]📋 Branch '{self.selected_branch['name']}' copied to clipboard.[/green]"
+                )
+            elif selected_label == "Show Latest Commit":
+                commit_date = self.selected_branch['latest_commit']
+                self.output_widget.update(
+                    f"[blue]Latest commit for branch '{self.selected_branch['name']}':[/blue] {commit_date}"
+                )
+
+            self.output_scroll.visible = True
+            self.set_focus(self.list_view)
+
     def prompt_next_argument(self):
         if self.arg_index < len(self.arg_prompts):
             name, param = self.arg_prompts[self.arg_index]
@@ -150,6 +185,12 @@ class NavigatorApp(App):
                 self.load_sections()
             elif self.view_state == "args":
                 self.load_scripts(self.current_section)
+            elif self.view_state == "branch_actions":
+                self.view_state = "scripts"
+                self.load_scripts(self.current_section)
+            elif self.view_state == "branch_action_menu":
+                self.view_state = "branch_actions"
+                self.show_branch_list()
         elif event.key == "c":
             if self.output_scroll.visible:
                 text_to_copy = self.output_widget.renderable
@@ -169,6 +210,12 @@ class NavigatorApp(App):
 
             sys.stdout = old_stdout
 
+            if isinstance(result, list) and all(isinstance(item, dict) and 'name' in item for item in result):
+                self.view_state = "branch_actions"
+                self.branch_list = result
+                self.show_branch_list()
+                return
+
             if isinstance(result, list):
                 result_output = "\n".join(map(str, result)) if result else "(Empty list)"
             else:
@@ -180,16 +227,36 @@ class NavigatorApp(App):
             display_text += f"[green]✅ Function '{self.script_function.__name__}' executed.[/green]\n\nResult:\n{result_output}"
             display_text += "\n\n[yellow]Press 'c' to copy this output to clipboard.[/yellow]"
 
+            self.output_widget.update(display_text)
+            self.output_scroll.visible = True
+            self.view_state = "scripts"
+
         except Exception as e:
             sys.stdout = old_stdout
             display_text = f"[red]❌ Error calling function:[/red]\n{e}"
+            self.output_widget.update(display_text)
+            self.output_scroll.visible = True
+            self.view_state = "scripts"
 
-        self.output_widget.update(display_text)
-        self.output_scroll.visible = True
-        self.view_state = "scripts"
         self.input_widget.visible = False
         self.input_widget.value = ""
         self.set_focus(self.list_view)
+
+    def show_branch_list(self):
+        self.list_view.clear()
+        self.list_view.append(ListItem(Label("🔙 Back")))
+        for branch in self.branch_list:
+            label = f"{branch['name']} (⏱ {branch['latest_commit']})"
+            self.list_view.append(ListItem(Label(label)))
+        self.output_scroll.visible = False
+        self.set_focus(self.list_view)
+
+    def show_branch_action_menu(self):
+        self.list_view.clear()
+        self.list_view.append(ListItem(Label("🔙 Back")))
+        actions = ["Copy Branch Name", "Show Latest Commit"]
+        for action in actions:
+            self.list_view.append(ListItem(Label(action)))
 
 
 if __name__ == "__main__":
