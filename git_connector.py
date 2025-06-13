@@ -17,6 +17,7 @@ headers = {
 
 session = requests.Session()
 
+
 def handle_pagination(url):
     all_data = []
     page = 1
@@ -57,14 +58,25 @@ def get_team_members(org, team_slug):
     url = f'{base_url}/orgs/{org}/teams/{team_slug}/members'
     print(f'Fetching team members from {team_slug} in {org}')
     all_data = handle_pagination(url)
-    return [member['login'] for page in all_data for member in page]
-
+    usernames = [member['login'] for page in all_data for member in page]
+    return usernames
 
 def get_team_repositories(org, team_slug):
     url = f'{base_url}/orgs/{org}/teams/{team_slug}/repos'
     print(f'Fetching repositories for team: {team_slug} in {org}')
     all_data = handle_pagination(url)
-    return [repo['full_name'] for page in all_data for repo in page]
+
+    repo_info = []
+    for page in all_data:
+        for repo in page:
+            name = repo['full_name']
+            archived = "📦 Archived" if repo.get('archived') else "✅ Active"
+            privacy = "🔒 Private" if repo.get('private') else "🌍 Public"
+            fork = "🍴 Fork" if repo.get('fork') else "📘 Original"
+            info = f"{name} — {archived} | {privacy} | {fork}"
+            repo_info.append(info)
+
+    return repo_info
 
 
 def fetch_pull_requests_for_repos(repos, creator_filters=None):
