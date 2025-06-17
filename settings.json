@@ -1,5 +1,5 @@
 {
-    "theme": "light",
-    "default_team": "",
-    "default_org": ""
+    "theme": "dark",
+    "default_team": "asd",
+    "default_org": "asd"
 }

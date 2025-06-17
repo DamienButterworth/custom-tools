@@ -5,38 +5,19 @@ from textual import events
 import inspect
 import io
 import sys
-import os
-import json
-import git_connector
-import check_coverages
-import pull_requests
 import pyperclip
+import config
 
-SETTINGS_FILE = "settings.json"
-DEFAULT_SETTINGS = {
-    "theme": "dark",
-    "default_team": "",
-    "default_org": ""
-}
-
-SECTIONS = {
-    "GitHub": [
-        ("Team repos", git_connector.get_team_repositories),
-        ("Team slugs", git_connector.get_team_slugs),
-        ("Repository branches", git_connector.get_repository_branches),
-        ("Pull requests", pull_requests.list_open_pull_requests_team),
-    ],
-    "Scala": [
-        ("Recursive coverage percentages", check_coverages.execute)
-    ],
-    "Settings": []  # We'll populate dynamically
-}
 
 class NavigatorApp(App):
     CSS_PATH = None
 
     def __init__(self):
         super().__init__()
+        self.output_widget = None
+        self.output_scroll = None
+        self.input_widget = None
+        self.list_view = None
         self.view_state = "sections"
         self.current_section = None
         self.selected_script = None
@@ -46,21 +27,12 @@ class NavigatorApp(App):
         self.collected_args = []
         self.branch_list = []
         self.selected_branch = None
-        self.settings = self.load_settings()
+        self.settings = config.load_settings()
         self.setting_being_edited = None
 
         # Dynamically populate settings section
-        SECTIONS["Settings"] = [(f"{k.capitalize().replace('_', ' ')}: {v}", lambda key=k: key) for k, v in self.settings.items()]
-
-    def load_settings(self):
-        if os.path.exists(SETTINGS_FILE):
-            with open(SETTINGS_FILE, "r") as f:
-                return json.load(f)
-        return DEFAULT_SETTINGS.copy()
-
-    def save_settings(self):
-        with open(SETTINGS_FILE, "w") as f:
-            json.dump(self.settings, f, indent=4)
+        config.SECTIONS["Settings"] = [(f"{k.capitalize().replace('_', ' ')}: {v}", lambda key=k: key) for k, v in
+                                       self.settings.items()]
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -90,7 +62,7 @@ class NavigatorApp(App):
         self.output_scroll.visible = False
         self.output_widget.update("")
         self.list_view.clear()
-        for section in SECTIONS.keys():
+        for section in config.SECTIONS.keys():
             self.list_view.append(ListItem(Label(section)))
         self.set_focus(self.list_view)
 
@@ -104,7 +76,7 @@ class NavigatorApp(App):
         self.output_widget.update("")
         self.list_view.clear()
         self.list_view.append(ListItem(Label("🔙 Back")))
-        for name, _ in SECTIONS[section_name]:
+        for name, _ in config.SECTIONS[section_name]:
             self.list_view.append(ListItem(Label(name)))
         self.set_focus(self.list_view)
 
@@ -119,7 +91,7 @@ class NavigatorApp(App):
                 self.load_sections()
                 return
 
-            for name, func in SECTIONS[self.current_section]:
+            for name, func in config.SECTIONS[self.current_section]:
                 if name == selected_label:
                     self.selected_script = name
                     self.script_function = func
@@ -161,10 +133,12 @@ class NavigatorApp(App):
 
             if selected_label == "Copy Branch Name":
                 pyperclip.copy(self.selected_branch['name'])
-                self.output_widget.update(f"[green]📋 Branch '{self.selected_branch['name']}' copied to clipboard.[/green]")
+                self.output_widget.update(
+                    f"[green]📋 Branch '{self.selected_branch['name']}' copied to clipboard.[/green]")
             elif selected_label == "Show Latest Commit":
                 commit_date = self.selected_branch['latest_commit']
-                self.output_widget.update(f"[blue]Latest commit for branch '{self.selected_branch['name']}':[/blue] {commit_date}")
+                self.output_widget.update(
+                    f"[blue]Latest commit for branch '{self.selected_branch['name']}':[/blue] {commit_date}")
 
             self.output_scroll.visible = True
             self.set_focus(self.list_view)
@@ -185,10 +159,11 @@ class NavigatorApp(App):
         if self.view_state == "args" and self.current_section == "Settings" and self.setting_being_edited:
             new_value = message.value.strip()
             self.settings[self.setting_being_edited] = new_value
-            self.save_settings()
+            config.save_settings(self)
 
             # Refresh Settings list view
-            SECTIONS["Settings"] = [(f"{k.capitalize().replace('_', ' ')}: {v}", lambda key=k: key) for k, v in self.settings.items()]
+            config.SECTIONS["Settings"] = [(f"{k.capitalize().replace('_', ' ')}: {v}", lambda key=k: key) for k, v in
+                                           self.settings.items()]
 
             self.output_widget.update(f"[green]✅ Setting '{self.setting_being_edited}' updated to:[/green] {new_value}")
             self.output_scroll.visible = True
@@ -242,6 +217,7 @@ class NavigatorApp(App):
                     self.output_widget.update(f"{text_to_copy}\n\n[yellow]📋 Output copied to clipboard.[/yellow]")
 
     def run_collected_arguments(self):
+        global old_stdout
         try:
             old_stdout = sys.stdout
             sys.stdout = buffer = io.StringIO()

@@ -1,0 +1,39 @@
+import git_connector as gc
+import pull_requests as pr
+import check_coverages as cc
+
+import os
+import json
+
+SETTINGS_FILE = "settings.json"
+
+DEFAULT_SETTINGS = {
+    "theme": "dark",
+    "default_team": "",
+    "default_org": ""
+}
+
+SECTIONS = {
+    "GitHub": [
+        ("Team repos", gc.get_team_repositories),
+        ("Team slugs", gc.get_team_slugs),
+        ("Repository branches", gc.get_repository_branches),
+        ("Pull requests", pr.list_open_pull_requests_team),
+    ],
+    "Scala": [
+        ("Recursive coverage percentages", cc.execute)
+    ],
+    "Settings": []  # We'll populate dynamically
+}
+
+
+def load_settings():
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, "r") as f:
+            return json.load(f)
+    return DEFAULT_SETTINGS.copy()
+
+
+def save_settings(navigator):
+    with open(SETTINGS_FILE, "w") as f:
+        json.dump(navigator.settings, f, indent=4)
