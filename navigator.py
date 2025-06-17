@@ -5,10 +5,19 @@ from textual import events
 import inspect
 import io
 import sys
+import os
+import json
 import git_connector
 import check_coverages
 import pull_requests
-import pyperclip  # <-- Added for clipboard functionality
+import pyperclip
+
+SETTINGS_FILE = "settings.json"
+DEFAULT_SETTINGS = {
+    "theme": "dark",
+    "default_team": "",
+    "default_org": ""
+}
 
 SECTIONS = {
     "GitHub": [
@@ -19,9 +28,9 @@ SECTIONS = {
     ],
     "Scala": [
         ("Recursive coverage percentages", check_coverages.execute)
-    ]
+    ],
+    "Settings": []  # We'll populate dynamically
 }
-
 
 class NavigatorApp(App):
     CSS_PATH = None
@@ -37,6 +46,21 @@ class NavigatorApp(App):
         self.collected_args = []
         self.branch_list = []
         self.selected_branch = None
+        self.settings = self.load_settings()
+        self.setting_being_edited = None
+
+        # Dynamically populate settings section
+        SECTIONS["Settings"] = [(f"{k.capitalize().replace('_', ' ')}: {v}", lambda key=k: key) for k, v in self.settings.items()]
+
+    def load_settings(self):
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, "r") as f:
+                return json.load(f)
+        return DEFAULT_SETTINGS.copy()
+
+    def save_settings(self):
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(self.settings, f, indent=4)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -44,9 +68,7 @@ class NavigatorApp(App):
             self.list_view = ListView()
             yield self.list_view
 
-            self.input_widget = Input(
-                placeholder="Enter arguments and press Enter..."
-            )
+            self.input_widget = Input(placeholder="Enter arguments and press Enter...")
             yield self.input_widget
 
             self.output_scroll = ScrollableContainer()
@@ -102,13 +124,22 @@ class NavigatorApp(App):
                     self.selected_script = name
                     self.script_function = func
                     self.view_state = "args"
-                    self.arg_prompts = list(inspect.signature(func).parameters.items())
-                    self.collected_args = []
-                    self.arg_index = 0
 
-                    self.input_widget.visible = True
-                    self.output_scroll.visible = False
-                    self.prompt_next_argument()
+                    if self.current_section == "Settings":
+                        self.setting_being_edited = func()
+                        self.input_widget.visible = True
+                        self.output_scroll.visible = False
+                        current_value = self.settings.get(self.setting_being_edited, "")
+                        self.input_widget.placeholder = f"Enter new value for {self.setting_being_edited} (current: {current_value})"
+                        self.input_widget.value = ""
+                        self.set_focus(self.input_widget)
+                    else:
+                        self.arg_prompts = list(inspect.signature(func).parameters.items())
+                        self.collected_args = []
+                        self.arg_index = 0
+                        self.input_widget.visible = True
+                        self.output_scroll.visible = False
+                        self.prompt_next_argument()
                     break
 
         elif self.view_state == "branch_actions":
@@ -130,14 +161,10 @@ class NavigatorApp(App):
 
             if selected_label == "Copy Branch Name":
                 pyperclip.copy(self.selected_branch['name'])
-                self.output_widget.update(
-                    f"[green]📋 Branch '{self.selected_branch['name']}' copied to clipboard.[/green]"
-                )
+                self.output_widget.update(f"[green]📋 Branch '{self.selected_branch['name']}' copied to clipboard.[/green]")
             elif selected_label == "Show Latest Commit":
                 commit_date = self.selected_branch['latest_commit']
-                self.output_widget.update(
-                    f"[blue]Latest commit for branch '{self.selected_branch['name']}':[/blue] {commit_date}"
-                )
+                self.output_widget.update(f"[blue]Latest commit for branch '{self.selected_branch['name']}':[/blue] {commit_date}")
 
             self.output_scroll.visible = True
             self.set_focus(self.list_view)
@@ -155,6 +182,22 @@ class NavigatorApp(App):
             self.run_collected_arguments()
 
     async def on_input_submitted(self, message: Input.Submitted) -> None:
+        if self.view_state == "args" and self.current_section == "Settings" and self.setting_being_edited:
+            new_value = message.value.strip()
+            self.settings[self.setting_being_edited] = new_value
+            self.save_settings()
+
+            # Refresh Settings list view
+            SECTIONS["Settings"] = [(f"{k.capitalize().replace('_', ' ')}: {v}", lambda key=k: key) for k, v in self.settings.items()]
+
+            self.output_widget.update(f"[green]✅ Setting '{self.setting_being_edited}' updated to:[/green] {new_value}")
+            self.output_scroll.visible = True
+            self.input_widget.visible = False
+            self.setting_being_edited = None
+            self.view_state = "scripts"
+            self.load_scripts("Settings")
+            return
+
         if self.view_state == "args" and self.script_function:
             raw = message.value.strip()
             name, param = self.arg_prompts[self.arg_index]
@@ -196,9 +239,7 @@ class NavigatorApp(App):
                 text_to_copy = self.output_widget.renderable
                 if text_to_copy:
                     pyperclip.copy(str(text_to_copy))
-                    self.output_widget.update(
-                        f"{text_to_copy}\n\n[yellow]📋 Output copied to clipboard.[/yellow]"
-                    )
+                    self.output_widget.update(f"{text_to_copy}\n\n[yellow]📋 Output copied to clipboard.[/yellow]")
 
     def run_collected_arguments(self):
         try:
