@@ -19,7 +19,11 @@ session = requests.Session()
 
 
 def list_open_pull_requests_team(org, team, creator_filters=None):
-    repos = get_team_repositories(org, team)
+    team_repos = get_team_repositories(org, team)
+    repos = []
+    for team in team_repos:
+        repos.append(team['full_name'])
+
     all_pull_requests = []
 
     for repo in repos:
@@ -45,44 +49,41 @@ def get_pull_requests(repo, creator_filters=None):
 
 def get_team_members(org, team):
     url = f'{base_url}/orgs/{org}/teams/{team}/members'
-    print(f'Fetching team members from {team} in {org}')
     all_data = __handle_pagination(url)
-    usernames = [member['login'] for page in all_data for member in page]
-    return usernames
+    response = [
+        {
+            'user': user['login']
+        }
+        for page in all_data
+        for user in page
+    ]
+    return response
 
 
 def get_team_repositories(org, team):
     url = f'{base_url}/orgs/{org}/teams/{team}/repos'
-    print(f'Fetching repositories for team: {team} in {org}')
     all_data = __handle_pagination(url)
-
-    repo_info = []
-    for page in all_data:
-        for repo in page:
-            name = repo['full_name']
-            repo_info.append(f"{name}")
-
-    return repo_info
-
-
-def fetch_pull_requests_for_repos(repos, creator_filters=None):
-    with ThreadPoolExecutor() as executor:
-        futures = [executor.submit(get_pull_requests, repo, creator_filters) for repo in repos]
-        results = []
-        for future in as_completed(futures):
-            try:
-                results.extend(future.result())
-            except Exception as e:
-                print(f'Error occurred while fetching PRs: {e}')
-        return results
+    response = [
+        {
+            "full_name": repo['full_name']
+        }
+        for page in all_data
+        for repo in page
+    ]
+    return response
 
 
 def get_teams(org):
     url = f'{base_url}/orgs/{org}/teams'
-    print(f'Fetching team slugs for organization: {org}')
     all_data = __handle_pagination(url)
-    slugs = [team['slug'] for page in all_data for team in page]
-    return slugs
+    response = [
+        {
+            "slug": team['slug']
+        }
+        for page in all_data
+        for team in page
+    ]
+    return response
 
 
 def get_team_branches(org, team):
@@ -106,7 +107,6 @@ def get_team_branches(org, team):
 def get_repository_branches(repo, org=None):
     full_repo = f"{org}/{repo}" if org else repo
     branches_url = f'{base_url}/repos/{full_repo}/branches'
-    print(f'Fetching branches for repository: {full_repo}')
     all_data = __handle_pagination(branches_url)
 
     branches = []

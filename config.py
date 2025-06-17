@@ -15,6 +15,7 @@ DEFAULT_SETTINGS = {
 SECTIONS = {
     "GitHub": [
         ("Team repos", gc.get_team_repositories),
+        ("Team members", gc.get_team_members),
         ("Team slugs", gc.get_teams),
         ("Repository branches", gc.get_repository_branches),
         ("Team branches", gc.get_team_branches),

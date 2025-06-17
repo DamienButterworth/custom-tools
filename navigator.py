@@ -14,7 +14,7 @@ from rich.text import Text
 
 
 class NavigatorApp(App):
-    CSS_PATH = None
+    CSS_PATH = "themes/styles.css"
 
     def __init__(self):
         super().__init__()
