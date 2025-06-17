@@ -18,45 +18,49 @@ headers = {
 session = requests.Session()
 
 
+def list_open_pull_requests_team(org, team, creator_filters=None):
+    repos = get_team_repositories(org, team)
+    all_pull_requests = []
+
+    for repo in repos:
+        open_prs = get_pull_requests(repo, creator_filters)
+        all_pull_requests.extend(open_prs)
+
+    return all_pull_requests
+
+
 def get_pull_requests(repo, creator_filters=None):
     url = f"{base_url}/repos/{repo}/pulls"
     all_data = __handle_pagination(url)
-    return [
+    response = [
         {
-            'repository': repo,
-            'pr_title': pr['title'],
-            'created_by': pr['user']['login'],
-            'created_at': pr['created_at'],
-            'url': pr['html_url']
+            'url': pr['url'],
+            'user': pr['user']['login']
         }
         for page in all_data
         for pr in page
-        if not creator_filters or pr['user']['login'] in creator_filters
     ]
+    return response
 
 
-def get_team_members(org, team_slug):
-    url = f'{base_url}/orgs/{org}/teams/{team_slug}/members'
-    print(f'Fetching team members from {team_slug} in {org}')
+def get_team_members(org, team):
+    url = f'{base_url}/orgs/{org}/teams/{team}/members'
+    print(f'Fetching team members from {team} in {org}')
     all_data = __handle_pagination(url)
     usernames = [member['login'] for page in all_data for member in page]
     return usernames
 
 
-def get_team_repositories(org, team_slug):
-    url = f'{base_url}/orgs/{org}/teams/{team_slug}/repos'
-    print(f'Fetching repositories for team: {team_slug} in {org}')
+def get_team_repositories(org, team):
+    url = f'{base_url}/orgs/{org}/teams/{team}/repos'
+    print(f'Fetching repositories for team: {team} in {org}')
     all_data = __handle_pagination(url)
 
     repo_info = []
     for page in all_data:
         for repo in page:
             name = repo['full_name']
-            archived = "📦 Archived" if repo.get('archived') else "✅ Active"
-            privacy = "🔒 Private" if repo.get('private') else "🌍 Public"
-            fork = "🍴 Fork" if repo.get('fork') else "📘 Original"
-            info = f"{name} — {archived} | {privacy} | {fork}"
-            repo_info.append(info)
+            repo_info.append(f"{name}")
 
     return repo_info
 
@@ -73,24 +77,30 @@ def fetch_pull_requests_for_repos(repos, creator_filters=None):
         return results
 
 
-def fetch_repositories_for_teams(org, team_slugs):
-    with ThreadPoolExecutor() as executor:
-        futures = [executor.submit(get_team_repositories, org, team_slug) for team_slug in team_slugs]
-        all_repositories = []
-        for future in as_completed(futures):
-            try:
-                all_repositories.extend(future.result())
-            except Exception as e:
-                print(f'Error occurred while fetching repositories: {e}')
-        return all_repositories
-
-
-def get_team_slugs(org):
+def get_teams(org):
     url = f'{base_url}/orgs/{org}/teams'
     print(f'Fetching team slugs for organization: {org}')
     all_data = __handle_pagination(url)
     slugs = [team['slug'] for page in all_data for team in page]
     return slugs
+
+
+def get_team_branches(org, team):
+    team_repos = get_team_repositories(org, team)
+    paginated_branches = []
+    for repo in team_repos:
+        branches = get_repository_branches(repo, None)
+        paginated_branches.append(branches)
+
+    response = [
+        {
+            'name': branch['name'],
+            'latest_commit': branch['latest_commit']
+        }
+        for branches in paginated_branches
+        for branch in branches
+    ]
+    return response
 
 
 def get_repository_branches(repo, org=None):

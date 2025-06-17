@@ -1,5 +1,4 @@
 import git_connector as gc
-import pull_requests as pr
 import check_coverages as cc
 
 import os
@@ -16,9 +15,10 @@ DEFAULT_SETTINGS = {
 SECTIONS = {
     "GitHub": [
         ("Team repos", gc.get_team_repositories),
-        ("Team slugs", gc.get_team_slugs),
+        ("Team slugs", gc.get_teams),
         ("Repository branches", gc.get_repository_branches),
-        ("Pull requests", pr.list_open_pull_requests_team),
+        ("Team branches", gc.get_team_branches),
+        ("Pull requests", gc.list_open_pull_requests_team),
     ],
     "Scala": [
         ("Recursive coverage percentages", cc.execute)

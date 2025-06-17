@@ -7,6 +7,10 @@ import io
 import sys
 import pyperclip
 import config
+import asyncio
+from rich.spinner import Spinner
+from rich.table import Table
+from rich.text import Text
 
 
 class NavigatorApp(App):
@@ -30,9 +34,7 @@ class NavigatorApp(App):
         self.settings = config.load_settings()
         self.setting_being_edited = None
 
-        # Dynamically populate settings section
-        config.SECTIONS["Settings"] = [(f"{k.capitalize().replace('_', ' ')}: {v}", lambda key=k: key) for k, v in
-                                       self.settings.items()]
+        config.SECTIONS["Settings"] = [(f"{k.capitalize().replace('_', ' ')}: {v}", lambda key=k: key) for k, v in self.settings.items()]
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -111,7 +113,7 @@ class NavigatorApp(App):
                         self.arg_index = 0
                         self.input_widget.visible = True
                         self.output_scroll.visible = False
-                        self.prompt_next_argument()
+                        await self.prompt_next_argument()
                     break
 
         elif self.view_state == "branch_actions":
@@ -143,17 +145,31 @@ class NavigatorApp(App):
             self.output_scroll.visible = True
             self.set_focus(self.list_view)
 
-    def prompt_next_argument(self):
-        if self.arg_index < len(self.arg_prompts):
+    async def prompt_next_argument(self):
+        while self.arg_index < len(self.arg_prompts):
             name, param = self.arg_prompts[self.arg_index]
+            setting_key = f"default_{name.lower()}"
+
+            if setting_key in self.settings and self.settings[setting_key]:
+                value = self.settings[setting_key]
+                if param.annotation != inspect.Parameter.empty:
+                    try:
+                        value = param.annotation(value)
+                    except Exception:
+                        pass
+                self.collected_args.append(value)
+                self.arg_index += 1
+                continue
+
             if param.default != inspect.Parameter.empty:
                 self.input_widget.placeholder = f"Enter value for: {name} (optional, press Enter for default)"
             else:
                 self.input_widget.placeholder = f"Enter value for: {name}"
             self.input_widget.value = ""
             self.set_focus(self.input_widget)
-        else:
-            self.run_collected_arguments()
+            return
+
+        await self.run_collected_arguments()
 
     async def on_input_submitted(self, message: Input.Submitted) -> None:
         if self.view_state == "args" and self.current_section == "Settings" and self.setting_being_edited:
@@ -161,9 +177,7 @@ class NavigatorApp(App):
             self.settings[self.setting_being_edited] = new_value
             config.save_settings(self)
 
-            # Refresh Settings list view
-            config.SECTIONS["Settings"] = [(f"{k.capitalize().replace('_', ' ')}: {v}", lambda key=k: key) for k, v in
-                                           self.settings.items()]
+            config.SECTIONS["Settings"] = [(f"{k.capitalize().replace('_', ' ')}: {v}", lambda key=k: key) for k, v in self.settings.items()]
 
             self.output_widget.update(f"[green]✅ Setting '{self.setting_being_edited}' updated to:[/green] {new_value}")
             self.output_scroll.visible = True
@@ -179,82 +193,59 @@ class NavigatorApp(App):
 
             try:
                 if not raw:
-                    if param.default != inspect.Parameter.empty:
-                        casted = param.default
-                    else:
-                        casted = None
+                    casted = param.default if param.default != inspect.Parameter.empty else None
                 else:
-                    if param.annotation != inspect.Parameter.empty:
-                        casted = param.annotation(raw)
-                    else:
-                        casted = raw
+                    casted = param.annotation(raw) if param.annotation != inspect.Parameter.empty else raw
 
                 self.collected_args.append(casted)
                 self.arg_index += 1
-                self.prompt_next_argument()
+                await self.prompt_next_argument()
 
             except Exception as e:
                 self.input_widget.placeholder = f"❌ Invalid input for {name}: {e}. Try again."
                 self.input_widget.value = ""
 
-    async def on_key(self, event: events.Key) -> None:
-        if event.key in ("left", "escape"):
-            if self.view_state == "scripts":
-                self.load_sections()
-            elif self.view_state == "args":
-                self.load_scripts(self.current_section)
-            elif self.view_state == "branch_actions":
-                self.view_state = "scripts"
-                self.load_scripts(self.current_section)
-            elif self.view_state == "branch_action_menu":
-                self.view_state = "branch_actions"
-                self.show_branch_list()
-        elif event.key == "c":
-            if self.output_scroll.visible:
-                text_to_copy = self.output_widget.renderable
-                if text_to_copy:
-                    pyperclip.copy(str(text_to_copy))
-                    self.output_widget.update(f"{text_to_copy}\n\n[yellow]📋 Output copied to clipboard.[/yellow]")
-
-    def run_collected_arguments(self):
+    async def run_collected_arguments(self):
         global old_stdout
+        self.output_scroll.visible = True
+        self.output_widget.update(Spinner("dots", text="Running function..."))
+        self.set_focus(self.output_widget)
+        await asyncio.sleep(0.1)
+
         try:
             old_stdout = sys.stdout
             sys.stdout = buffer = io.StringIO()
 
-            result = self.script_function(*self.collected_args)
+            result = await asyncio.to_thread(self.script_function, *self.collected_args)
             printed_output = buffer.getvalue()
 
             sys.stdout = old_stdout
 
-            if isinstance(result, list) and all(isinstance(item, dict) and 'name' in item for item in result):
-                self.view_state = "branch_actions"
-                self.branch_list = result
-                self.show_branch_list()
-                return
-
-            if isinstance(result, list):
-                result_output = "\n".join(map(str, result)) if result else "(Empty list)"
+            if isinstance(result, list) and all(isinstance(item, dict) for item in result):
+                if not result:
+                    self.output_widget.update("(Empty list)")
+                else:
+                    table = Table(show_header=True, header_style="bold magenta")
+                    keys = result[0].keys()
+                    for key in keys:
+                        table.add_column(str(key), overflow="fold", no_wrap=False)
+                    for item in result:
+                        table.add_row(*(str(item.get(k, "")) for k in keys))
+                    self.output_widget.update(table)
             else:
                 result_output = str(result)
-
-            display_text = ""
-            if printed_output.strip():
-                display_text += f"[blue]Printed Output:[/blue]\n{printed_output.strip()}\n\n"
-            display_text += f"[green]✅ Function '{self.script_function.__name__}' executed.[/green]\n\nResult:\n{result_output}"
-            display_text += "\n\n[yellow]Press 'c' to copy this output to clipboard.[/yellow]"
-
-            self.output_widget.update(display_text)
-            self.output_scroll.visible = True
-            self.view_state = "scripts"
+                display_text = ""
+                if printed_output.strip():
+                    display_text += f"[blue]Printed Output:[/blue]\n{printed_output.strip()}\n\n"
+                display_text += f"[green]✅ Function '{self.script_function.__name__}' executed.[/green]\n\nResult:\n{result_output}"
+                display_text += "\n\n[yellow]Press 'c' to copy this output to clipboard.[/yellow]"
+                self.output_widget.update(display_text)
 
         except Exception as e:
             sys.stdout = old_stdout
-            display_text = f"[red]❌ Error calling function:[/red]\n{e}"
-            self.output_widget.update(display_text)
-            self.output_scroll.visible = True
-            self.view_state = "scripts"
+            self.output_widget.update(f"[red]❌ Error calling function:[/red]\n{e}")
 
+        self.view_state = "scripts"
         self.input_widget.visible = False
         self.input_widget.value = ""
         self.set_focus(self.list_view)
@@ -274,6 +265,25 @@ class NavigatorApp(App):
         actions = ["Copy Branch Name", "Show Latest Commit"]
         for action in actions:
             self.list_view.append(ListItem(Label(action)))
+
+    async def on_key(self, event: events.Key) -> None:
+        if event.key in ("left", "escape"):
+            if self.view_state == "scripts":
+                self.load_sections()
+            elif self.view_state == "args":
+                self.load_scripts(self.current_section)
+            elif self.view_state == "branch_actions":
+                self.view_state = "scripts"
+                self.load_scripts(self.current_section)
+            elif self.view_state == "branch_action_menu":
+                self.view_state = "branch_actions"
+                self.show_branch_list()
+        elif event.key == "c":
+            if self.output_scroll.visible:
+                text_to_copy = self.output_widget.renderable
+                if text_to_copy:
+                    pyperclip.copy(str(text_to_copy))
+                    self.output_widget.update(f"{text_to_copy}\n\n[yellow]📋 Output copied to clipboard.[/yellow]")
 
 
 if __name__ == "__main__":

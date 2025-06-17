@@ -5,3 +5,4 @@ textual
 pyperclip
 matplotlib
 pandas
+rich
