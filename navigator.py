@@ -10,11 +10,12 @@ import config
 import asyncio
 from rich.spinner import Spinner
 from rich.table import Table
-from rich.text import Text
+from rich.console import Console
+import re
 
 
 class NavigatorApp(App):
-    CSS_PATH = "themes/styles.css"
+    CSS_PATH = None
 
     def __init__(self):
         super().__init__()
@@ -115,7 +116,6 @@ class NavigatorApp(App):
                         self.output_scroll.visible = False
                         await self.prompt_next_argument()
                     break
-
         elif self.view_state == "branch_actions":
             if selected_label == "🔙 Back":
                 self.view_state = "scripts"
@@ -181,7 +181,7 @@ class NavigatorApp(App):
 
             self.output_widget.update(f"[green]✅ Setting '{self.setting_being_edited}' updated to:[/green] {new_value}")
             self.output_scroll.visible = True
-            self.input_widget.visible = False
+
             self.setting_being_edited = None
             self.view_state = "scripts"
             self.load_scripts("Settings")
@@ -280,10 +280,16 @@ class NavigatorApp(App):
                 self.show_branch_list()
         elif event.key == "c":
             if self.output_scroll.visible:
-                text_to_copy = self.output_widget.renderable
-                if text_to_copy:
-                    pyperclip.copy(str(text_to_copy))
-                    self.output_widget.update(f"{text_to_copy}\n\n[yellow]📋 Output copied to clipboard.[/yellow]")
+                renderable = self.output_widget.renderable
+                if renderable:
+                    buffer = io.StringIO()
+                    console = Console(file=buffer, force_terminal=True, width=100)
+                    console.print(renderable)
+                    formatted_output = buffer.getvalue()
+                    ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
+                    plain_output = ansi_escape.sub('', formatted_output)
+                    pyperclip.copy(plain_output)
+                    self.output_widget.update(f"{renderable}\n\n[yellow]📋 Output copied to clipboard.[/yellow]")
 
 
 if __name__ == "__main__":

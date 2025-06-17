@@ -26,7 +26,7 @@ def scan_project_dir(project_dir):
                 value, fail = extract_scoverage_settings(file_path)
                 if value is not None and fail:
                     return value  # Found what we need
-    return None  # Not found or missing condition
+    return None
 
 
 def scan_root_dir(root_dir):

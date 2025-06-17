@@ -7,7 +7,6 @@ import json
 SETTINGS_FILE = "settings.json"
 
 DEFAULT_SETTINGS = {
-    "theme": "dark",
     "default_team": "",
     "default_org": ""
 }
@@ -24,7 +23,7 @@ SECTIONS = {
     "Scala": [
         ("Recursive coverage percentages", cc.execute)
     ],
-    "Settings": []  # We'll populate dynamically
+    "Settings": []
 }
 
 
