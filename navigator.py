@@ -1,3 +1,5 @@
+import importlib
+
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, ListView, ListItem, Label, Input, Static
 from textual.containers import Vertical, ScrollableContainer
@@ -20,7 +22,7 @@ class NavigatorApp(App):
         super().__init__()
         self.output_widget = None
         self.output_scroll = None
-        self.input_widget = None
+        self.input_widget = Input(placeholder="Enter arguments and press Enter...")
         self.list_view = None
         self.view_state = "sections"
         self.current_section = None
@@ -42,7 +44,6 @@ class NavigatorApp(App):
             self.list_view = ListView()
             yield self.list_view
 
-            self.input_widget = Input(placeholder="Enter arguments and press Enter...")
             yield self.input_widget
 
             self.output_scroll = ScrollableContainer()
@@ -53,6 +54,7 @@ class NavigatorApp(App):
     async def on_mount(self) -> None:
         self.output_widget = Static(id="output-display")
         await self.output_scroll.mount(self.output_widget)
+        await self.input_widget.remove()
         self.load_sections()
 
     def load_sections(self):
@@ -60,7 +62,8 @@ class NavigatorApp(App):
         self.current_section = None
         self.selected_script = None
         self.script_function = None
-        self.input_widget.visible = False
+        if self.input_widget.parent:
+            self.call_from_thread(self.input_widget.remove)
         self.output_scroll.visible = False
         self.output_widget.update("")
         self.list_view.clear()
@@ -73,14 +76,26 @@ class NavigatorApp(App):
         self.current_section = section_name
         self.selected_script = None
         self.script_function = None
-        self.input_widget.visible = False
+        if self.input_widget.parent:
+            self.call_from_thread(self.input_widget.remove)
         self.output_scroll.visible = False
         self.output_widget.update("")
         self.list_view.clear()
-        self.list_view.append(ListItem(Label("🔙 Back")))
+        self.list_view.append(ListItem(Label("🖙 Back")))
         for name, _ in config.SECTIONS[section_name]:
             self.list_view.append(ListItem(Label(name)))
         self.set_focus(self.list_view)
+
+    def reload_all(self, section_name=None, highlight_item=None):
+        importlib.reload(config)  # 🔄 Reload the config module completely
+
+        self.settings = config.load_settings()
+        config.SECTIONS["Settings"] = [
+            (f"{k.capitalize().replace('_', ' ')}: {v}", lambda key=k: key)
+            for k, v in self.settings.items()
+        ]
+
+        self.load_sections()
 
     async def on_list_view_selected(self, event: ListView.Selected) -> None:
         selected_label = str(event.item.query_one(Label).renderable)
@@ -89,7 +104,7 @@ class NavigatorApp(App):
             self.load_scripts(selected_label)
 
         elif self.view_state == "scripts":
-            if selected_label == "🔙 Back":
+            if selected_label == "🖙 Back":
                 self.load_sections()
                 return
 
@@ -101,7 +116,8 @@ class NavigatorApp(App):
 
                     if self.current_section == "Settings":
                         self.setting_being_edited = func()
-                        self.input_widget.visible = True
+                        if not self.input_widget.parent:
+                            await self.mount(self.input_widget, after=self.list_view)
                         self.output_scroll.visible = False
                         current_value = self.settings.get(self.setting_being_edited, "")
                         self.input_widget.placeholder = f"Enter new value for {self.setting_being_edited} (current: {current_value})"
@@ -111,13 +127,14 @@ class NavigatorApp(App):
                         self.arg_prompts = list(inspect.signature(func).parameters.items())
                         self.collected_args = []
                         self.arg_index = 0
-                        self.input_widget.visible = True
+                        if not self.input_widget.parent:
+                            await self.mount(self.input_widget, after=self.list_view)
                         self.output_scroll.visible = False
                         await self.prompt_next_argument()
                     break
 
         elif self.view_state == "branch_actions":
-            if selected_label == "🔙 Back":
+            if selected_label == "🖙 Back":
                 self.view_state = "scripts"
                 self.load_scripts(self.current_section)
                 return
@@ -128,7 +145,7 @@ class NavigatorApp(App):
             self.show_branch_action_menu()
 
         elif self.view_state == "branch_action_menu":
-            if selected_label == "🔙 Back":
+            if selected_label == "🖙 Back":
                 self.view_state = "branch_actions"
                 self.show_branch_list()
                 return
@@ -161,6 +178,9 @@ class NavigatorApp(App):
                 self.arg_index += 1
                 continue
 
+            if not self.input_widget.parent:
+                await self.mount(self.input_widget, after=self.list_view)
+
             if param.default != inspect.Parameter.empty:
                 self.input_widget.placeholder = f"Enter value for: {name} (optional, press Enter for default)"
             else:
@@ -177,14 +197,17 @@ class NavigatorApp(App):
             self.settings[self.setting_being_edited] = new_value
             config.save_settings(self)
 
-            config.SECTIONS["Settings"] = [(f"{k.capitalize().replace('_', ' ')}: {v}", lambda key=k: key) for k, v in self.settings.items()]
-
-            self.output_widget.update(f"[green]✅ Setting '{self.setting_being_edited}' updated to:[/green] {new_value}")
+            self.output_widget.update(
+                f"""[green]✅ Setting '{self.setting_being_edited}' updated to:[/green] {new_value}
+[yellow]Settings updated. Reloaded view.[/yellow]""")
             self.output_scroll.visible = True
-            self.input_widget.visible = False
+            if self.input_widget.parent:
+                await self.input_widget.remove()
+
+            highlight_label = f"{self.setting_being_edited.capitalize().replace('_', ' ')}: {new_value}"
             self.setting_being_edited = None
             self.view_state = "scripts"
-            self.load_scripts("Settings")
+            self.reload_all(section_name="Settings", highlight_item=highlight_label)
             return
 
         if self.view_state == "args" and self.script_function:
@@ -207,6 +230,8 @@ class NavigatorApp(App):
 
     async def run_collected_arguments(self):
         global old_stdout
+        if self.input_widget.parent:
+            await self.input_widget.remove()
         self.output_scroll.visible = True
         self.output_widget.update(Spinner("dots", text="Running function..."))
         self.set_focus(self.output_widget)
@@ -246,13 +271,11 @@ class NavigatorApp(App):
             self.output_widget.update(f"[red]❌ Error calling function:[/red]\n{e}")
 
         self.view_state = "scripts"
-        self.input_widget.visible = False
-        self.input_widget.value = ""
         self.set_focus(self.list_view)
 
     def show_branch_list(self):
         self.list_view.clear()
-        self.list_view.append(ListItem(Label("🔙 Back")))
+        self.list_view.append(ListItem(Label("🖙 Back")))
         for branch in self.branch_list:
             label = f"{branch['name']} (⏱ {branch['latest_commit']})"
             self.list_view.append(ListItem(Label(label)))
@@ -261,13 +284,16 @@ class NavigatorApp(App):
 
     def show_branch_action_menu(self):
         self.list_view.clear()
-        self.list_view.append(ListItem(Label("🔙 Back")))
+        self.list_view.append(ListItem(Label("🖙 Back")))
         actions = ["Copy Branch Name", "Show Latest Commit"]
         for action in actions:
             self.list_view.append(ListItem(Label(action)))
 
     async def on_key(self, event: events.Key) -> None:
         if event.key in ("left", "escape"):
+            if self.input_widget.parent:
+                await self.input_widget.remove()
+
             if self.view_state == "scripts":
                 self.load_sections()
             elif self.view_state == "args":
@@ -278,12 +304,6 @@ class NavigatorApp(App):
             elif self.view_state == "branch_action_menu":
                 self.view_state = "branch_actions"
                 self.show_branch_list()
-        elif event.key == "c":
-            if self.output_scroll.visible:
-                text_to_copy = self.output_widget.renderable
-                if text_to_copy:
-                    pyperclip.copy(str(text_to_copy))
-                    self.output_widget.update(f"{text_to_copy}\n\n[yellow]📋 Output copied to clipboard.[/yellow]")
 
 
 if __name__ == "__main__":

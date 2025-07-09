@@ -36,6 +36,8 @@ def list_open_pull_requests_team(org, team, creator_filters=None):
 def get_pull_requests(repo, creator_filters=None):
     url = f"{base_url}/repos/{repo}/pulls"
     all_data = __handle_pagination(url)
+
+    # Prepare a filtered response
     response = [
         {
             'url': pr['url'],
@@ -43,8 +45,11 @@ def get_pull_requests(repo, creator_filters=None):
         }
         for page in all_data
         for pr in page
+        if creator_filters is None or pr['user']['login'] in creator_filters
     ]
+
     return response
+
 
 
 def get_team_members(org, team):
