@@ -16,8 +16,6 @@ from rich.text import Text
 
 
 class NavigatorApp(App):
-    CSS_PATH = "themes/styles.css"
-
     def __init__(self):
         super().__init__()
         self.output_widget = None
@@ -35,6 +33,7 @@ class NavigatorApp(App):
         self.selected_branch = None
         self.settings = config.load_settings()
         self.setting_being_edited = None
+        self.last_output_clipboard_text = ""
 
         config.SECTIONS["Settings"] = [(f"{k.capitalize().replace('_', ' ')}: {v}", lambda key=k: key) for k, v in self.settings.items()]
 
@@ -87,7 +86,7 @@ class NavigatorApp(App):
         self.set_focus(self.list_view)
 
     def reload_all(self, section_name=None, highlight_item=None):
-        importlib.reload(config)  # 🔄 Reload the config module completely
+        importlib.reload(config)
 
         self.settings = config.load_settings()
         config.SECTIONS["Settings"] = [
@@ -246,9 +245,12 @@ class NavigatorApp(App):
 
             sys.stdout = old_stdout
 
+            self.last_output_clipboard_text = ""
+
             if isinstance(result, list) and all(isinstance(item, dict) for item in result):
                 if not result:
                     self.output_widget.update("(Empty list)")
+                    self.last_output_clipboard_text = "(Empty list)"
                 else:
                     table = Table(show_header=True, header_style="bold magenta")
                     keys = result[0].keys()
@@ -257,6 +259,13 @@ class NavigatorApp(App):
                     for item in result:
                         table.add_row(*(str(item.get(k, "")) for k in keys))
                     self.output_widget.update(table)
+
+                    text_lines = []
+                    for item in result:
+                        for k, v in item.items():
+                            text_lines.append(f"{k}: {v}")
+                        text_lines.append("")
+                    self.last_output_clipboard_text = "\n".join(text_lines)
             else:
                 result_output = str(result)
                 display_text = ""
@@ -265,6 +274,7 @@ class NavigatorApp(App):
                 display_text += f"[green]✅ Function '{self.script_function.__name__}' executed.[/green]\n\nResult:\n{result_output}"
                 display_text += "\n\n[yellow]Press 'c' to copy this output to clipboard.[/yellow]"
                 self.output_widget.update(display_text)
+                self.last_output_clipboard_text = printed_output.strip() + "\n" + result_output if printed_output.strip() else result_output
 
         except Exception as e:
             sys.stdout = old_stdout
@@ -304,6 +314,13 @@ class NavigatorApp(App):
             elif self.view_state == "branch_action_menu":
                 self.view_state = "branch_actions"
                 self.show_branch_list()
+
+        elif event.key == "c" and self.output_widget.visible:
+            if self.last_output_clipboard_text:
+                pyperclip.copy(self.last_output_clipboard_text)
+                self.output_widget.update(
+                    Text.from_markup(str(self.output_widget.renderable)) + "\n\n[green]📋 Output copied to clipboard.[/green]"
+                )
 
 
 if __name__ == "__main__":

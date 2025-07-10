@@ -27,27 +27,27 @@ def save_settings(navigator):
 
 
 def build_sections(settings):
-    default_team = settings.get("default_team", "Team")
-    if default_team == "":
-        default_team = "Team"
-    default_org = settings.get("default_org", "Organisation")
-    if default_org == "":
-        default_org = "Organisation"
-    creator_filters = settings.get("default_creator_filters", "All team")
-    if creator_filters == "":
-        creator_filters = "All team"
+    default_team_name = settings.get("default_team", "")
+    if default_team_name:
+        default_team_name = f"({default_team_name})"
+    default_org_name = settings.get("default_org", "")
+    if default_org_name:
+        default_org_name = f"({default_org_name})"
+    creator_filters_name = settings.get("default_creator_filters", "")
+    if creator_filters_name:
+        creator_filters_name = f"({creator_filters_name})"
 
     sections = {
         "Github": [
-            (f"{default_team} repos", gc.get_team_repositories),
-            (f"{default_team} members", gc.get_team_members),
-            (f"{default_org} team slugs", gc.get_teams),
-            (f"{default_org} repository branches", gc.get_repository_branches),
-            (f"{default_team} branches", gc.get_team_branches),
-            (f"{creator_filters} pull requests", gc.list_open_pull_requests_team),
+            (f"Team repos {default_team_name}", gc.get_team_repositories),
+            (f"Team members {default_team_name}", gc.get_team_members),
+            (f"Organisation team slugs {default_org_name}", gc.get_teams),
+            (f"Organisation repository branches {default_org_name}", gc.get_repository_branches),
+            (f"Team branches {default_team_name}", gc.get_team_branches),
+            (f"Team pull requests {creator_filters_name}", gc.list_open_pull_requests_team),
         ],
         "Scala": [
-            ("Recursive coverage percentages", cc.execute)
+            ("Recursive coverage percentage=s", cc.execute)
         ],
         "Settings": []  # Can be populated dynamically if needed
     }

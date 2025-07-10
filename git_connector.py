@@ -51,7 +51,6 @@ def get_pull_requests(repo, creator_filters=None):
     return response
 
 
-
 def get_team_members(org, team):
     url = f'{base_url}/orgs/{org}/teams/{team}/members'
     all_data = __handle_pagination(url)
@@ -91,21 +90,32 @@ def get_teams(org):
     return response
 
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+
 def get_team_branches(org, team):
     team_repos = get_team_repositories(org, team)
-    paginated_branches = []
-    for repo in team_repos:
-        branches = get_repository_branches(repo, None)
-        paginated_branches.append(branches)
 
-    response = [
-        {
-            'name': branch['name'],
-            'latest_commit': branch['latest_commit']
-        }
-        for branches in paginated_branches
-        for branch in branches
-    ]
+    def fetch_branches(repo):
+        branches = get_repository_branches(repo['full_name'], None)
+        print(branches)
+        return [
+            {
+                'name': branch['name'],
+                'url': branch['url']
+            }
+            for branch in branches
+        ]
+
+    response = []
+    with ThreadPoolExecutor(max_workers=10) as executor:  # Adjust workers as needed
+        future_to_repo = {executor.submit(fetch_branches, repo): repo for repo in team_repos}
+        for future in as_completed(future_to_repo):
+            try:
+                response.extend(future.result())
+            except Exception as e:
+                print(f"Error fetching branches for repo {future_to_repo[future]['full_name']}: {e}")
+
     return response
 
 
@@ -113,24 +123,17 @@ def get_repository_branches(repo, org=None):
     full_repo = f"{org}/{repo}" if org else repo
     branches_url = f'{base_url}/repos/{full_repo}/branches'
     all_data = __handle_pagination(branches_url)
-
     branches = []
     for page in all_data:
         for branch in page:
             branch_name = branch['name']
-            commit_url = branch['commit']['url']
-            try:
-                commit_response = session.get(commit_url, headers=headers)
-                commit_response.raise_for_status()
-                commit_data = commit_response.json()
-                latest_commit = commit_data['commit']['committer'].get('date')
-            except requests.exceptions.RequestException as e:
-                print(f"Error fetching commit data for branch {branch_name}: {e}")
-                latest_commit = None
-
+            if org:
+                url = f"https://github.com/{org}/{repo}/tree/{branch_name}"
+            else:
+                url = f"https://github.com/{repo}/tree/{branch_name}"
             branches.append({
                 'name': branch_name,
-                'latest_commit': latest_commit
+                'url': url
             })
     return branches
 
