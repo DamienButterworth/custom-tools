@@ -1,0 +1,32 @@
+Screen {
+    layout: horizontal;
+}
+
+Sidebar {
+    width: 30;
+    background: rgb(30, 30, 30);
+    border: solid rgb(0,0,0);
+}
+
+#content {
+    padding: 2;
+}
+
+Button {
+    width: 100%;
+    margin: 1 0;
+}
+
+.section {
+    margin-top: 2;
+    text-style: bold;
+}
+
+TextArea {
+    border: solid gray;
+    padding: 1;
+}
+
+Input {
+    border: solid gray;
+}

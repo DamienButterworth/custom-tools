@@ -38,6 +38,16 @@ class YAMLConfig:
         with open(self.path, "r") as f:
             self._data = yaml.safe_load(f) or {}
 
+    def save(self, config: dict):
+        with self.path.open("w", encoding="utf-8") as f:
+            yaml.safe_dump(
+                config,
+                f,
+                default_flow_style=False,
+                sort_keys=False,
+                allow_unicode=True,
+            )
+
     def reload(self):
         """Reloads the YAML file from disk."""
         self.load()

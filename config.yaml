@@ -1,20 +1,24 @@
 github:
   active-team-members:
-    - "DamienButterworth"
-    - "vajarova"
-    - "ericohwotu"
-    - "justega247"
-    - "JSquires91"
-    - "Arei1997"
-    - "coolkrish04"
-    - "jamie2210"
-    - "rakeshshamantula"
-    - "AnushTagvoryan"
-    - "ajan-farah"
-    - "deepatel2511"
-  organisation: "hmrc"
-  team: "ctc-traders"
+  - DamienButterworth
+  - vajarova
+  - ericohwotu
+  - justega247
+  - JSquires91
+  - Arei1997
+  - coolkrish04
+  - jamie2210
+  - rakeshshamantula
+  - AnushTagvoryan
+  - ajan-farah
+  - deepatel2511
+  organisation: hmrc
+  team: ctc-traders
   ignored-repositories:
-    - "app-config-base"
+  - app-config-base
+  - testing
+  - testging2
+  - testing3
+  - testing4
 local:
-  active-working-directory: "/Users/damien.butterworth/WORKSPACE"
+  active-working-directory: /Users/damien.butterworth/WORKSPACE
