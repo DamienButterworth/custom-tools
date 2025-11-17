@@ -13,7 +13,7 @@ class Sidebar(Container):
         yield Button("Settings", id="settings")
         yield Button("About", id="about")
 
-        yield Static(" Data Views ", classes="section")
+        yield Static(" Github ", classes="section")
 
         yield Select(
             options=[
