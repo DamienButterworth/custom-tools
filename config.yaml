@@ -16,9 +16,5 @@ github:
   team: ctc-traders
   ignored-repositories:
   - app-config-base
-  - testing
-  - testging2
-  - testing3
-  - testing4
 local:
   active-working-directory: /Users/damien.butterworth/WORKSPACE
