@@ -23,8 +23,3 @@ class GitHubTeamRequests:
         return self.client.delete(
             f"/orgs/{self.organisation}/teams/{self.team_slug}/memberships/{username}"
         )
-
-if __name__ == "__main__":
-    g = GitHubTeamRequests("hmrc", "ctc-traders")
-
-    print(g.list_teams().last().pretty_print_json())

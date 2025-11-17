@@ -8,10 +8,17 @@ from textual.widgets import (
     Input,
     TextArea,
     Label,
+    Select,
 )
 
+import json
 from config import YAMLConfig
+from github.team_requests import GitHubTeamRequests
 
+
+# ─────────────────────────────────────────────────────────────
+# Sidebar
+# ─────────────────────────────────────────────────────────────
 class Sidebar(Container):
     def compose(self) -> ComposeResult:
         yield Static(" Menu ", classes="title")
@@ -19,11 +26,27 @@ class Sidebar(Container):
         yield Button("Settings", id="settings")
         yield Button("About", id="about")
 
+        yield Static(" Data Views ", classes="section")
 
+        yield Select(
+            options=[
+                ("Team Repos", "get_team_repos"),
+            ],
+            prompt="Select Data",
+            id="data_select",
+        )
+
+
+# ─────────────────────────────────────────────────────────────
+# Main Content Container
+# ─────────────────────────────────────────────────────────────
 class MainContent(Container):
     pass
 
 
+# ─────────────────────────────────────────────────────────────
+# Settings View
+# ─────────────────────────────────────────────────────────────
 class SettingsView(VerticalScroll):
 
     def __init__(self, config: YAMLConfig):
@@ -51,7 +74,6 @@ class SettingsView(VerticalScroll):
             id="ignored_repos",
         )
 
-        # Local section
         yield Label("Local Settings", classes="section")
 
         yield Label("Active Working Directory:")
@@ -85,13 +107,15 @@ class SettingsView(VerticalScroll):
 
         self.config.save(updated_config)
 
-        # Safe notify across Textual versions
         if hasattr(self.app, "notify"):
             self.app.notify("Settings saved.", severity="information")
         else:
             print("Settings saved.")
 
 
+# ─────────────────────────────────────────────────────────────
+# Main Application
+# ─────────────────────────────────────────────────────────────
 class MyApp(App):
     CSS_PATH = "styles.css"
 
@@ -101,24 +125,81 @@ class MyApp(App):
         yield MainContent(id="content")
         yield Footer()
 
+    # ─────────────────────────────────────────────────────────
+    # Sidebar Button Logic
+    # ─────────────────────────────────────────────────────────
     def on_button_pressed(self, event: Button.Pressed):
         content = self.query_one("#content", MainContent)
         content.remove_children()
 
+        # home page
         if event.button.id == "home":
-            content.mount(
-                Static("🏠 Home Page\n\nThis is the home screen.", expand=True)
-            )
+            view = Static("🏠 Home Page\n\nThis is the home screen.")
+            view.styles.height = "100%"
+            view.styles.width = "100%"
+            content.mount(view)
 
+        # settings page
         elif event.button.id == "settings":
             cfg = YAMLConfig()
             content.mount(SettingsView(cfg))
 
+        # about page
         elif event.button.id == "about":
-            content.mount(
-                Static("ℹ️ About\n\nA demo Textual TUI with a sidebar.", expand=True)
-            )
+            about = Static("ℹ️ About\n\nA demo Textual TUI with a sidebar.")
+            about.styles.height = "100%"
+            about.styles.width = "100%"
+            content.mount(about)
+
+    # ─────────────────────────────────────────────────────────
+    # Dropdown Handler
+    # ─────────────────────────────────────────────────────────
+    def on_select_changed(self, event: Select.Changed):
+        if event.select.id != "data_select":
+            return
+
+        selected = event.value
+        content = self.query_one("#content", MainContent)
+        content.remove_children()
+
+        # Mapping from dropdown values → functions
+        data_function_map = {
+            "get_team_repos": self.get_team_repos
+        }
+
+        if selected not in data_function_map:
+            content.mount(Static(f"No function for: {selected}"))
+            return
+
+        # Execute data-producing function
+        raw_data = data_function_map[selected]()
+
+        # Prevent double-encoding JSON
+        if isinstance(raw_data, str):
+            pretty_json = raw_data
+        else:
+            pretty_json = json.dumps(raw_data, indent=2)
+
+        # Display JSON
+        ta = TextArea(pretty_json, read_only=True)
+        ta.styles.height = "100%"
+        ta.styles.width = "100%"
+        content.mount(ta)
+
+    # ─────────────────────────────────────────────────────────
+    # JSON-producing functions
+    # ─────────────────────────────────────────────────────────
+    def get_team_repos(self):
+        config = YAMLConfig()
+        gtr = GitHubTeamRequests(
+            config.config.github.organisation,
+            config.config.github.team,
+        )
+        return gtr.get_team_repos().value()
 
 
+# ─────────────────────────────────────────────────────────────
+# Run the app
+# ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     MyApp().run()
