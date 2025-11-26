@@ -1,17 +1,29 @@
 Screen {
-    layout: horizontal;
+    /* Vertical stack: Header, main row, Footer */
+    layout: vertical;
 }
 
+/* The row that contains sidebar and content */
+#main-row {
+    layout: horizontal;
+    height: 1fr;        /* Take remaining space between header & footer */
+}
+
+/* Sidebar same as you had */
 Sidebar {
     width: 30;
     background: rgb(30, 30, 30);
     border: solid rgb(0,0,0);
 }
 
+/* Content area fills the rest of the row */
 #content {
-    padding: 2;
+    layout: vertical;
+    width: 1fr;
+    height: 1fr;
 }
 
+/* Your existing styling rules */
 Button {
     width: 100%;
     margin: 1 0;
@@ -22,6 +34,15 @@ Button {
     text-style: bold;
 }
 
+.title {
+    text-style: bold;
+    margin-top: 1;
+}
+
+.description {
+    text-style: dim;
+}
+
 TextArea {
     border: solid gray;
     padding: 1;
@@ -29,4 +50,12 @@ TextArea {
 
 Input {
     border: solid gray;
+}
+
+#button-row Button {
+    margin-right: 2;
+}
+
+#button-row Button:last-child {
+    margin-right: 0;
 }

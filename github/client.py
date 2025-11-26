@@ -13,19 +13,20 @@ def _handle_response(response):
         raise Exception(f"GitHub API Error {response.status_code}: {response.text}")
 
 
+def _get_nested(item, path):
+    keys = path.split(".")
+    value = item
+    for k in keys:
+        if isinstance(value, dict):
+            value = value.get(k)
+        else:
+            return None
+    return value
+
+
 class GitHubResponse:
     def __init__(self, data):
         self.data = data
-
-    def _get_nested(self, item, path):
-        keys = path.split(".")
-        value = item
-        for k in keys:
-            if isinstance(value, dict):
-                value = value.get(k)
-            else:
-                return None
-        return value
 
     def getFields(self, fields):
         if isinstance(self.data, list):
@@ -33,7 +34,7 @@ class GitHubResponse:
             for item in self.data:
                 if isinstance(item, dict):
                     extracted = {
-                        field: self._get_nested(item, field)
+                        field: _get_nested(item, field)
                         for field in fields
                     }
                     result.append(extracted)
@@ -41,7 +42,7 @@ class GitHubResponse:
 
         if isinstance(self.data, dict):
             extracted = {
-                field: self._get_nested(self.data, field)
+                field: _get_nested(self.data, field)
                 for field in fields
             }
             return GitHubResponse(extracted)
