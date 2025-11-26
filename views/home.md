@@ -1,15 +1,12 @@
-# Home
+# Custom Tools
 
-- Need to add content
+## Settings
 
-## Settings 
+- Used to configure fields based on user preference
 
-### Active Team Members
+## Github
 
+- These tools make calls to Github a pre-requisite for these to work is that a token is required under the environment name **GITHUB_TOKEN**
+- The format returned in these requests are collapsible JSON
 
-
-
-
-### Testing 2 
-
-#### Testing 3
+**NOTE** Depending on the amount of requests being made it is possible to hit the rate limit on GitHub.
